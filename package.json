@@ -11,9 +11,13 @@
   "scripts": {
     "dev:admin": "npm run dev --workspace @glutenfree/admin",
     "dev:mobile": "npm run start --workspace @glutenfree/mobile",
+    "db:start": "supabase start",
+    "db:test": "supabase test db",
+    "db:stop": "supabase stop",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
+    "supabase": "3.1.0",
     "typescript": "~5.9.3"
   }
 }
