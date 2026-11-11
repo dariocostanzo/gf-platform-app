@@ -1,0 +1,19 @@
+{
+  "name": "global-gluten-free-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev:admin": "npm run dev --workspace @glutenfree/admin",
+    "dev:mobile": "npm run start --workspace @glutenfree/mobile",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
