@@ -1,5 +1,5 @@
 # Supabase database
 
-Database schema and policy changes will be added as ordered SQL migrations under `supabase/migrations/`. Each migration should be reviewable, safe to apply in sequence, and include Row Level Security policies for any client-accessible table.
+Database schema and policy changes are recorded as ordered SQL migrations under `supabase/migrations/`. The initial core migration adds profiles and roles, PostGIS-backed restaurant submissions, sourced restaurant safety claims, and Row Level Security policies.
 
-No Supabase project, schema, credentials, or migration has been created in this foundation milestone. Add the Supabase CLI and local database workflow only when implementing the backend milestone; test migrations and policies before applying them to a hosted project.
+The RLS tests under `supabase/tests/database/` use pgTAP to cover member, anonymous, and administrator access. The migration and tests have not been executed because the Supabase CLI, PostgreSQL client, and Docker are not installed. Configure the Supabase CLI and local database workflow, then run `supabase test db` before applying migrations to a hosted project.

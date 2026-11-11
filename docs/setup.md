@@ -20,6 +20,16 @@ npm run typecheck
 
 If Node.js is missing, install an active LTS release using the official instructions at [nodejs.org](https://nodejs.org/), then open a new terminal and verify the two version commands above. This project setup does not install or configure system tools automatically.
 
+## Database milestone
+
+The initial schema is documented in `supabase/migrations/`. It requires a Supabase PostgreSQL project with PostGIS available. Database policy tests are in `supabase/tests/database/` and use pgTAP; after configuring the Supabase CLI and a local Supabase stack, run them with:
+
+```sh
+supabase test db
+```
+
+Do not apply migrations to a production project before reviewing the SQL and passing the database tests against a local or staging database. This repository does not yet include Supabase CLI project configuration.
+
 ## Run the apps
 
 Start the administration website:

@@ -15,8 +15,10 @@ Supabase Auth and PostgreSQL/PostGIS are the planned identity and data foundatio
 
 Restaurant safety information must retain its source (restaurant, community, or independent verification) and relevant dates. Ratings must not be used to calculate or assert coeliac safety. Food lookup data and automated analysis must also identify uncertainty and must not infer safety from absent ingredient or allergen data.
 
+The initial database migration creates profiles from Supabase Auth users, keeps role assignments out of client write access, restricts restaurant submissions to pending review, and exposes only published restaurants and their safety claims to the public. Administrator role provisioning is deliberately a trusted-operator task; there is no public signup path to administrator access.
+
 ## Future growth
 
-Restaurant discovery, reviews, travel content, and later social features should be modeled as distinct domain areas with explicit ownership and moderation. Social media, follows, reactions, and feeds are intentionally not part of this foundation milestone. Their later addition should not require putting feed or social concerns into the restaurant or safety models.
+Restaurant discovery, reviews, travel content, and later social features should be modeled as distinct domain areas with explicit ownership and moderation. Social media, follows, reactions, and feeds are intentionally deferred; their later addition should not require putting feed or social concerns into the restaurant or safety models.
 
 Maps and product lookups should be integrated behind small app-level services. Before production, verify OpenStreetMap tile/geocoding policies and Open Food Facts attribution, licensing, data quality, and usage limits.
