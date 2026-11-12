@@ -164,9 +164,17 @@ select extensions.is(
   'an administrator can read all restaurants'
 );
 select extensions.is(
-  (select count(*) from public.user_roles),
+  (
+    select count(*)
+    from public.user_roles
+    where user_id in (
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000003'
+    )
+  ),
   3::bigint,
-  'an administrator can read all role assignments'
+  'an administrator can read each test user role assignment'
 );
 select extensions.is(
   (select count(*) from public.restaurant_safety_claims),
