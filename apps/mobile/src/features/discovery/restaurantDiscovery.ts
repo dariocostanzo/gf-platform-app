@@ -22,7 +22,12 @@ export async function searchPublishedRestaurants(
   searchText: string,
   signal: AbortSignal
 ): Promise<RestaurantSummary[]> {
-  const searchTerm = escapeLikeWildcards(searchText.trim());
+  const searchTerm = searchText.trim();
+  if (!searchTerm) {
+    return [];
+  }
+
+  const escapedSearchTerm = escapeLikeWildcards(searchTerm);
   const selectFields =
     "id,name,address,city,region,country_code,listing_source,source_reference,source_license,gluten_free_options" as const;
   const createBaseQuery = () =>
@@ -34,16 +39,7 @@ export async function searchPublishedRestaurants(
       .limit(resultLimit)
       .abortSignal(signal);
 
-  if (!searchTerm) {
-    const { data, error } = await createBaseQuery();
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  const pattern = `%${searchTerm}%`;
+  const pattern = `%${escapedSearchTerm}%`;
   const [nameResult, cityResult] = await Promise.all([
     createBaseQuery().ilike("name", pattern),
     createBaseQuery().ilike("city", pattern)
