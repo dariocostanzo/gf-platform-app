@@ -14,7 +14,8 @@ export async function searchPublishedRestaurants(
   signal: AbortSignal
 ): Promise<RestaurantSummary[]> {
   const searchTerm = escapeLikeWildcards(searchText.trim());
-  const selectFields = "id,name,address,city,region,country_code" as const;
+  const selectFields =
+    "id,name,address,city,region,country_code,listing_source,source_reference,source_license,gluten_free_options" as const;
   const createBaseQuery = () =>
     client
       .from("restaurants")

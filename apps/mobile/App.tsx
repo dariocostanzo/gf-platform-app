@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -81,7 +82,8 @@ export default function App() {
         <Text style={styles.eyebrow}>DISCOVER</Text>
         <Text style={styles.title}>Find a place to eat</Text>
         <Text style={styles.description}>
-          Search published restaurant listings by name or city.
+          Search restaurant listings by name or city. A small OpenStreetMap
+          pilot currently covers central London.
         </Text>
         <TextInput
           accessibilityLabel="Search restaurants by name or city"
@@ -148,6 +150,23 @@ export default function App() {
         <Text style={styles.safetyNote}>
           Listings and community reports are not a guarantee of coeliac safety.
         </Text>
+        {restaurants.some(
+          (restaurant) => restaurant.listing_source === "openstreetmap"
+        ) && (
+          <Text
+            accessibilityRole="link"
+            onPress={() =>
+              Linking.openURL("https://www.openstreetmap.org/copyright").catch(
+                (error: unknown) =>
+                  console.error("Could not open OpenStreetMap attribution.", error)
+              )
+            }
+            style={styles.attribution}
+          >
+            © OpenStreetMap contributors · ODbL 1.0 ·
+            openstreetmap.org/copyright
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -174,7 +193,16 @@ function RestaurantCard({
       <Text style={styles.restaurantName}>{restaurant.name}</Text>
       {locality.length > 0 && <Text style={styles.locality}>{locality}</Text>}
       {restaurant.address && <Text style={styles.address}>{restaurant.address}</Text>}
-      <Text style={styles.listingNote}>Published listing · Check safety details</Text>
+      {restaurant.listing_source === "openstreetmap" ? (
+        <Text style={styles.listingNote}>
+          OpenStreetMap listing · Gluten-free options tag:{" "}
+          {restaurant.gluten_free_options} · Not safety-verified
+        </Text>
+      ) : (
+        <Text style={styles.listingNote}>
+          Published listing · Check safety details
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -292,6 +320,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 12,
     paddingTop: 12,
+    paddingBottom: 8,
+    textAlign: "center"
+  },
+  attribution: {
+    color: "#52645d",
+    fontSize: 11,
     paddingBottom: 8,
     textAlign: "center"
   }

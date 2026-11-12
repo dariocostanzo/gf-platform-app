@@ -22,7 +22,9 @@ export async function fetchPublishedRestaurantDetails(
 ): Promise<RestaurantDetails | null> {
   const { data: restaurant, error: restaurantError } = await client
     .from("restaurants")
-    .select("id,name,address,city,region,country_code,phone,website")
+    .select(
+      "id,name,address,city,region,country_code,phone,website,listing_source,source_reference,source_license,gluten_free_options"
+    )
     .eq("id", restaurantId)
     .eq("status", "published")
     .abortSignal(signal)

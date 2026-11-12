@@ -2,6 +2,7 @@ import type { RestaurantSafetyClaim } from "@glutenfree/shared";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -127,6 +128,43 @@ export default function RestaurantDetailScreen({ restaurantId, onBack }: Props) 
           )}
           {state.details.restaurant.website && (
             <Text style={styles.body}>{state.details.restaurant.website}</Text>
+          )}
+
+          {state.details.restaurant.listing_source === "openstreetmap" && (
+            <View style={styles.sourceCard}>
+              <Text style={styles.sectionTitle}>OpenStreetMap listing</Text>
+              <Text style={styles.body}>
+                OpenStreetMap records a gluten-free options tag:{" "}
+                {state.details.restaurant.gluten_free_options}. This is
+                community-mapped information, not a coeliac safety assessment.
+                Confirm current ingredients and kitchen procedures directly
+                with the restaurant.
+              </Text>
+              {state.details.restaurant.source_reference && (
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => {
+                    const sourceReference =
+                      state.details.restaurant.source_reference;
+                    if (sourceReference) {
+                      void Linking.openURL(sourceReference).catch(
+                        (error: unknown) =>
+                          console.error(
+                            "Could not open the OpenStreetMap source.",
+                            error
+                          )
+                      );
+                    }
+                  }}
+                  style={styles.metadata}
+                >
+                  Source: {state.details.restaurant.source_reference}
+                </Text>
+              )}
+              <Text style={styles.metadata}>
+                Data license: {state.details.restaurant.source_license}
+              </Text>
+            </View>
           )}
 
           <View style={styles.warning}>
@@ -307,5 +345,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "700"
+  },
+  sourceCard: {
+    backgroundColor: "#eaf2ed",
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 16,
+    padding: 14
   }
 });

@@ -28,8 +28,12 @@ export type Database = {
           phone: string | null;
           website: string | null;
           location: string;
+          listing_source: "community" | "openstreetmap";
+          source_reference: string | null;
+          source_license: string | null;
+          gluten_free_options: "yes" | "only" | "limited" | null;
           status: Database["public"]["Enums"]["restaurant_status"];
-          created_by: string;
+          created_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -44,8 +48,12 @@ export type Database = {
           phone?: string | null;
           website?: string | null;
           location: string;
+          listing_source?: "community" | "openstreetmap";
+          source_reference?: string | null;
+          source_license?: string | null;
+          gluten_free_options?: "yes" | "only" | "limited" | null;
           status?: Database["public"]["Enums"]["restaurant_status"];
-          created_by?: string;
+          created_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -105,7 +113,16 @@ export type Database = {
 
 export type RestaurantSummary = Pick<
   Database["public"]["Tables"]["restaurants"]["Row"],
-  "id" | "name" | "address" | "city" | "region" | "country_code"
+  | "id"
+  | "name"
+  | "address"
+  | "city"
+  | "region"
+  | "country_code"
+  | "listing_source"
+  | "source_reference"
+  | "source_license"
+  | "gluten_free_options"
 >;
 
 export type RestaurantSafetyClaim = Pick<

@@ -17,6 +17,8 @@ Restaurant safety information must retain its source (restaurant, community, or 
 
 The initial database migration creates profiles from Supabase Auth users, keeps role assignments out of client write access, restricts restaurant submissions to pending review, and exposes only published restaurants and their safety claims to the public. Administrator role provisioning is deliberately a trusted-operator task; there is no public signup path to administrator access.
 
+Directory listing provenance is separate from safety claims. The central London OpenStreetMap pilot preserves each source element URL, its ODbL-1.0 license, and the imported `diet:gluten_free` tag. That tag indicates mapped gluten-free options only and must never be shown as evidence of coeliac-safe preparation. Public interfaces must retain OpenStreetMap attribution and link to its copyright/license page.
+
 ## Future growth
 
 Restaurant discovery, reviews, travel content, and later social features should be modeled as distinct domain areas with explicit ownership and moderation. Social media, follows, reactions, and feeds are intentionally deferred; their later addition should not require putting feed or social concerns into the restaurant or safety models.
