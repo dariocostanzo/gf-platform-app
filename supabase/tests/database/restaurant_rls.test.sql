@@ -173,7 +173,7 @@ select extensions.is(
       '00000000-0000-4000-8000-000000000003'
     )
   ),
-  3::bigint,
+  4::bigint,
   'an administrator can read each test user role assignment'
 );
 select extensions.is(
