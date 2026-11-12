@@ -9,6 +9,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import RestaurantDetailScreen from "./src/features/discovery/RestaurantDetailScreen";
 import { searchPublishedRestaurants } from "./src/features/discovery/restaurantDiscovery";
 import { supabaseClient } from "./src/lib/supabase";
 
@@ -21,6 +22,9 @@ type DiscoveryState =
 export default function App() {
   const [searchText, setSearchText] = useState("");
   const [retryCount, setRetryCount] = useState(0);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(
+    null
+  );
   const [discovery, setDiscovery] = useState<DiscoveryState>(
     supabaseClient ? { status: "loading" } : { status: "unconfigured" }
   );
@@ -59,6 +63,15 @@ export default function App() {
       controller.abort();
     };
   }, [retryCount, searchText]);
+
+  if (selectedRestaurantId) {
+    return (
+      <RestaurantDetailScreen
+        onBack={() => setSelectedRestaurantId(null)}
+        restaurantId={selectedRestaurantId}
+      />
+    );
+  }
 
   const restaurants = discovery.status === "ready" ? discovery.restaurants : [];
 
@@ -124,7 +137,12 @@ export default function App() {
               </View>
             ) : undefined
           }
-          renderItem={({ item }) => <RestaurantCard restaurant={item} />}
+          renderItem={({ item }) => (
+            <RestaurantCard
+              onPress={() => setSelectedRestaurantId(item.id)}
+              restaurant={item}
+            />
+          )}
           showsVerticalScrollIndicator={false}
         />
         <Text style={styles.safetyNote}>
@@ -135,18 +153,29 @@ export default function App() {
   );
 }
 
-function RestaurantCard({ restaurant }: { restaurant: RestaurantSummary }) {
+function RestaurantCard({
+  restaurant,
+  onPress
+}: {
+  restaurant: RestaurantSummary;
+  onPress: () => void;
+}) {
   const locality = [restaurant.city, restaurant.region, restaurant.country_code]
     .filter(Boolean)
     .join(", ");
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View details for ${restaurant.name}`}
+      onPress={onPress}
+      style={styles.card}
+    >
       <Text style={styles.restaurantName}>{restaurant.name}</Text>
       {locality.length > 0 && <Text style={styles.locality}>{locality}</Text>}
       {restaurant.address && <Text style={styles.address}>{restaurant.address}</Text>}
       <Text style={styles.listingNote}>Published listing · Check safety details</Text>
-    </View>
+    </Pressable>
   );
 }
 

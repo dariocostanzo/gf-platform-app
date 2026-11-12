@@ -52,11 +52,52 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["restaurants"]["Insert"]>;
         Relationships: [];
       };
+      restaurant_safety_claims: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          claim_type: Database["public"]["Enums"]["safety_claim_type"];
+          claim_value: boolean;
+          source: Database["public"]["Enums"]["safety_information_source"];
+          details: string | null;
+          recorded_by: string;
+          recorded_at: string;
+          independently_verified_by: string | null;
+          independently_verified_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          claim_type: Database["public"]["Enums"]["safety_claim_type"];
+          claim_value: boolean;
+          source: Database["public"]["Enums"]["safety_information_source"];
+          details?: string | null;
+          recorded_by: string;
+          recorded_at?: string;
+          independently_verified_by?: string | null;
+          independently_verified_at?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["restaurant_safety_claims"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
       restaurant_status: "pending" | "published" | "rejected" | "archived";
+      safety_claim_type:
+        | "dedicated_gluten_free_kitchen"
+        | "dedicated_preparation_area"
+        | "separate_fryer"
+        | "cross_contamination_procedures"
+        | "staff_knowledge"
+        | "gluten_free_menu_available";
+      safety_information_source:
+        | "restaurant"
+        | "community"
+        | "independently_verified";
     };
     CompositeTypes: Record<string, never>;
   };
@@ -65,4 +106,15 @@ export type Database = {
 export type RestaurantSummary = Pick<
   Database["public"]["Tables"]["restaurants"]["Row"],
   "id" | "name" | "address" | "city" | "region" | "country_code"
+>;
+
+export type RestaurantSafetyClaim = Pick<
+  Database["public"]["Tables"]["restaurant_safety_claims"]["Row"],
+  | "id"
+  | "claim_type"
+  | "claim_value"
+  | "source"
+  | "details"
+  | "recorded_at"
+  | "independently_verified_at"
 >;
