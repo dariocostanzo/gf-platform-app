@@ -17,7 +17,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "supabase": "3.1.0",
-    "typescript": "~5.9.3"
+    "typescript": "~6.0.3"
   }
 }
