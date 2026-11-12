@@ -1,0 +1,16 @@
+{
+  "cli": {
+    "version": ">= 27.9.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

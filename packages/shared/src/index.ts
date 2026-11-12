@@ -92,7 +92,31 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      nearby_restaurants: {
+        Args: {
+          p_latitude: number;
+          p_longitude: number;
+          p_radius_meters: number;
+          p_search_text?: string | null;
+        };
+        Returns: Array<{
+          id: string;
+          name: string;
+          address: string | null;
+          city: string | null;
+          region: string | null;
+          country_code: string;
+          listing_source: "community" | "openstreetmap";
+          source_reference: string | null;
+          source_license: string | null;
+          gluten_free_options: "yes" | "only" | "limited" | null;
+          latitude: number;
+          longitude: number;
+          distance_meters: number;
+        }>;
+      };
+    };
     Enums: {
       restaurant_status: "pending" | "published" | "rejected" | "archived";
       safety_claim_type:

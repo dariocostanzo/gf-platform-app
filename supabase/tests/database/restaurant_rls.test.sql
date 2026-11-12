@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(14);
+select extensions.plan(17);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -147,6 +147,28 @@ select extensions.is(
   (select count(*) from public.restaurants),
   1::bigint,
   'anonymous visitors can read published restaurants only'
+);
+select extensions.is(
+  (
+    select count(*)
+    from public.nearby_restaurants(51.54, -0.14, 1000)
+  ),
+  1::bigint,
+  'anonymous nearby search returns published restaurants in range'
+);
+select extensions.is(
+  (
+    select count(*)
+    from public.nearby_restaurants(0, 0, 1000)
+  ),
+  0::bigint,
+  'anonymous nearby search excludes restaurants outside the radius'
+);
+select extensions.throws_ok(
+  $$select * from public.nearby_restaurants(0, 0, 500)$$,
+  '22023',
+  null,
+  'nearby search rejects a radius below the supported minimum'
 );
 select extensions.is(
   (select count(*) from public.restaurant_safety_claims),

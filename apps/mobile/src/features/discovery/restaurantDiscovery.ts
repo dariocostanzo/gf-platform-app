@@ -3,6 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const resultLimit = 50;
 type Client = SupabaseClient<Database>;
+export type NearbyRestaurant =
+  Database["public"]["Functions"]["nearby_restaurants"]["Returns"][number];
+
+export interface Coordinates {
+  latitude: number;
+  longitude: number;
+}
+
+export const nearbyRadiusOptions = [5000, 10000, 20000, 50000] as const;
 
 function escapeLikeWildcards(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
@@ -55,4 +64,27 @@ export async function searchPublishedRestaurants(
   return [...uniqueRestaurants.values()]
     .sort((left, right) => left.name.localeCompare(right.name))
     .slice(0, resultLimit);
+}
+
+export async function fetchNearbyRestaurants(
+  client: Client,
+  coordinates: Coordinates,
+  radiusMeters: number,
+  signal: AbortSignal,
+  searchText = ""
+): Promise<NearbyRestaurant[]> {
+  const { data, error } = await client
+    .rpc("nearby_restaurants", {
+      p_latitude: coordinates.latitude,
+      p_longitude: coordinates.longitude,
+      p_radius_meters: radiusMeters,
+      p_search_text: searchText.trim() || null
+    })
+    .abortSignal(signal);
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
