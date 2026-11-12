@@ -44,7 +44,9 @@ jobs:
         run: npm exec --workspace @glutenfree/mobile -- expo export --platform android
 
       - name: Start local Supabase
-        run: npm run db:start
+        run: >-
+          npm exec -- supabase start
+          --exclude realtime,storage-api,imgproxy,kong,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor,mailpit
 
       - name: Run database tests
         run: npm run db:test
