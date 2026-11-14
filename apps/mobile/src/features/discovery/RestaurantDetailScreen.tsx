@@ -11,10 +11,11 @@ import {
 } from "react-native";
 import { fetchPublishedRestaurantDetails } from "./restaurantDetails";
 import type { RestaurantDetails } from "./restaurantDetails";
+import type { RestaurantSelection } from "./restaurantDiscovery";
 import { supabaseClient } from "../../lib/supabase";
 
 interface Props {
-  restaurantId: string;
+  initialRestaurant: RestaurantSelection;
   onBack: () => void;
 }
 
@@ -39,11 +40,29 @@ const sourceLabels: Record<RestaurantSafetyClaim["source"], string> = {
   independently_verified: "Independently verified"
 };
 
-export default function RestaurantDetailScreen({ restaurantId, onBack }: Props) {
+export default function RestaurantDetailScreen({
+  initialRestaurant,
+  onBack
+}: Props) {
   const [retryCount, setRetryCount] = useState(0);
   const [state, setState] = useState<DetailState>({ status: "loading" });
 
   useEffect(() => {
+    if (initialRestaurant.id.startsWith("osm:")) {
+      setState({
+        status: "ready",
+        details: {
+          restaurant: {
+            ...initialRestaurant,
+            phone: initialRestaurant.phone ?? null,
+            website: initialRestaurant.website ?? null
+          },
+          safetyClaims: []
+        }
+      });
+      return;
+    }
+
     if (!supabaseClient) {
       setState({
         status: "error",
@@ -56,7 +75,11 @@ export default function RestaurantDetailScreen({ restaurantId, onBack }: Props) 
     const controller = new AbortController();
     setState({ status: "loading" });
 
-    fetchPublishedRestaurantDetails(client, restaurantId, controller.signal)
+    fetchPublishedRestaurantDetails(
+      client,
+      initialRestaurant.id,
+      controller.signal
+    )
       .then((details) => {
         if (!controller.signal.aborted) {
           setState(details ? { status: "ready", details } : { status: "not_found" });
@@ -75,7 +98,7 @@ export default function RestaurantDetailScreen({ restaurantId, onBack }: Props) 
       });
 
     return () => controller.abort();
-  }, [restaurantId, retryCount]);
+  }, [initialRestaurant, retryCount]);
 
   return (
     <View style={styles.screen}>
@@ -134,9 +157,15 @@ export default function RestaurantDetailScreen({ restaurantId, onBack }: Props) 
             <View style={styles.sourceCard}>
               <Text style={styles.sectionTitle}>OpenStreetMap listing</Text>
               <Text style={styles.body}>
-                OpenStreetMap records a gluten-free options tag:{" "}
-                {state.details.restaurant.gluten_free_options}. This is
-                community-mapped information, not a coeliac safety assessment.
+                {initialRestaurant.osm_gluten_free_tag ??
+                state.details.restaurant.gluten_free_options
+                  ? `OpenStreetMap records diet:gluten_free=${
+                      initialRestaurant.osm_gluten_free_tag ??
+                      state.details.restaurant.gluten_free_options
+                    }. `
+                  : "No gluten-free options tag is recorded in OpenStreetMap. "}
+                This is community-mapped information, not a coeliac safety
+                assessment.
                 Confirm current ingredients and kitchen procedures directly
                 with the restaurant.
               </Text>

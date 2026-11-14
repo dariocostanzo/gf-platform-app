@@ -19,6 +19,10 @@ The initial database migration creates profiles from Supabase Auth users, keeps 
 
 Directory listing provenance is separate from safety claims. The central London OpenStreetMap pilot preserves each source element URL, its ODbL-1.0 license, and the imported `diet:gluten_free` tag. That tag indicates mapped gluten-free options only and must never be shown as evidence of coeliac-safe preparation. Public interfaces must retain OpenStreetMap attribution and link to its copyright/license page.
 
+Mobile restaurant discovery supplements saved listings with bounded OpenStreetMap Overpass queries around the user's search radius and the current map viewport. Viewport requests are debounced and cached in memory; overly broad areas require the user to zoom in. Each Overpass query returns at most 500 places, so dense areas can be incomplete; the app says so and asks the user to zoom in. This provides global, best-effort coverage without downloading whole countries or relying on a systematic geocoding service. Public Overpass instances may be rate-limited or unavailable, so saved listings remain visible and the app reports when live results could not be loaded.
+
+Location privacy: a nearby search sends the device's coordinates to Supabase and a bounding box derived from them to OpenStreetMap; a map search sends only the visible map area to OpenStreetMap. The app does not persist location. When a saved listing and a live OpenStreetMap place share the same source URL, the saved listing is shown so its safety claims and stable identifier remain available.
+
 ## Future growth
 
 Restaurant discovery, reviews, travel content, and later social features should be modeled as distinct domain areas with explicit ownership and moderation. Social media, follows, reactions, and feeds are intentionally deferred; their later addition should not require putting feed or social concerns into the restaurant or safety models.

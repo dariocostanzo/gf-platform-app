@@ -3,9 +3,12 @@ import {
   Map as MapLibreMap,
   Marker
 } from "@maplibre/maplibre-react-native";
-import type { NearbyRestaurant } from "./restaurantDiscovery";
-import type { Coordinates } from "./restaurantDiscovery";
-import { useState } from "react";
+import type {
+  CameraRef,
+  MapRef,
+  ViewStateChangeEvent
+} from "@maplibre/maplibre-react-native";
+import { useEffect, useRef, useState } from "react";
 import {
   Linking,
   Modal,
@@ -15,26 +18,101 @@ import {
   Text,
   View
 } from "react-native";
+import type { NativeSyntheticEvent } from "react-native";
+import type {
+  Coordinates,
+  DiscoveryRestaurant,
+  MapBounds,
+  RestaurantSelection
+} from "./restaurantDiscovery";
 
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/liberty";
 
 interface Props {
   center: Coordinates;
   radiusMeters: number;
-  restaurants: NearbyRestaurant[];
-  onReadMore: (restaurantId: string) => void;
+  restaurants: DiscoveryRestaurant[];
+  onBoundsChange: (bounds: MapBounds) => void;
+  onReadMore: (restaurant: RestaurantSelection) => void;
+  searchError: string | null;
+  searchNotice: string | null;
+  searchLoading: boolean;
+  searchTooBroad: boolean;
+  onRetry: () => void;
 }
 
 export default function NearbyMap({
   center,
   radiusMeters,
   restaurants,
-  onReadMore
+  onBoundsChange,
+  onReadMore,
+  searchError,
+  searchNotice,
+  searchLoading,
+  searchTooBroad,
+  onRetry
 }: Props) {
+  const mapRef = useRef<MapRef>(null);
+  const cameraRef = useRef<CameraRef>(null);
+  const boundsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousRadius = useRef(radiusMeters);
   const [selectedRestaurant, setSelectedRestaurant] =
-    useState<NearbyRestaurant | null>(null);
+    useState<DiscoveryRestaurant | null>(null);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [directionsError, setDirectionsError] = useState<string | null>(null);
+
+  useEffect(
+    () => () => {
+      if (boundsTimeout.current) {
+        clearTimeout(boundsTimeout.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (previousRadius.current === radiusMeters) {
+      return;
+    }
+    previousRadius.current = radiusMeters;
+    const latitudeDelta = radiusMeters / 111_320;
+    const longitudeDelta =
+      radiusMeters /
+      (111_320 *
+        Math.max(Math.cos((center.latitude * Math.PI) / 180), 0.01));
+    cameraRef.current?.fitBounds(
+      [
+        center.longitude - longitudeDelta,
+        center.latitude - latitudeDelta,
+        center.longitude + longitudeDelta,
+        center.latitude + latitudeDelta
+      ],
+      {
+        padding: { top: 48, right: 48, bottom: 48, left: 48 },
+        duration: 350
+      }
+    );
+  }, [center, radiusMeters]);
+
+  const reportCurrentBounds = () => {
+    mapRef.current
+      ?.getViewState()
+      .then(({ bounds }) => onBoundsChange(bounds))
+      .catch((error: unknown) => {
+        console.error("Could not read the current map bounds.", error);
+      });
+  };
+
+  const handleRegionDidChange = (
+    event: NativeSyntheticEvent<ViewStateChangeEvent>
+  ) => {
+    if (boundsTimeout.current) {
+      clearTimeout(boundsTimeout.current);
+    }
+    const bounds = event.nativeEvent.bounds;
+    boundsTimeout.current = setTimeout(() => onBoundsChange(bounds), 450);
+  };
 
   const openDirections = (url: string) => {
     setDirectionsError(null);
@@ -63,10 +141,14 @@ export default function NearbyMap({
         compass
         logo
         mapStyle={mapStyleUrl}
+        onDidFinishLoadingMap={reportCurrentBounds}
+        onRegionDidChange={handleRegionDidChange}
+        ref={mapRef}
         scaleBar
         style={StyleSheet.absoluteFill}
       >
         <Camera
+          ref={cameraRef}
           initialViewState={{
             bounds: [
               center.longitude - longitudeDelta,
@@ -100,60 +182,100 @@ export default function NearbyMap({
             </View>
           </Marker>
         ))}
+        {selectedRestaurant && (
+          <Marker
+            anchor="bottom"
+            id={`preview-${selectedRestaurant.id}`}
+            lngLat={[
+              selectedRestaurant.longitude,
+              selectedRestaurant.latitude
+            ]}
+          >
+            <View style={styles.preview}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close restaurant preview"
+                onPress={() => setSelectedRestaurant(null)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeText}>×</Text>
+              </Pressable>
+              <Text style={styles.name}>{selectedRestaurant.name}</Text>
+              <Text style={styles.address}>
+                {[selectedRestaurant.address, selectedRestaurant.city]
+                  .filter(Boolean)
+                  .join(", ") || "Address not available"}
+              </Text>
+              <Text style={styles.address}>
+                {formatDistance(selectedRestaurant.distance_meters)} away
+              </Text>
+              {selectedRestaurant.listing_source === "openstreetmap" && (
+                <Text style={styles.provenance}>
+                  {selectedRestaurant.osm_gluten_free_tag ??
+                  selectedRestaurant.gluten_free_options
+                    ? `OSM diet:gluten_free=${
+                        selectedRestaurant.osm_gluten_free_tag ??
+                        selectedRestaurant.gluten_free_options
+                      }. Not safety-verified.`
+                    : "No gluten-free options tag is recorded in OSM. Not safety-verified."}
+                </Text>
+              )}
+              <View style={styles.actions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => onReadMore(selectedRestaurant)}
+                  style={styles.primaryAction}
+                >
+                  <Text style={styles.primaryActionText}>Read more</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setDirectionsError(null);
+                    setDirectionsOpen(true);
+                  }}
+                  style={styles.secondaryAction}
+                >
+                  <Text style={styles.secondaryActionText}>Get directions</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Marker>
+        )}
       </MapLibreMap>
+
+      {(searchLoading || searchError || searchTooBroad || searchNotice) && (
+        <View style={styles.searchStatus}>
+          {searchLoading ? (
+            <Text style={styles.searchStatusText}>
+              Searching this map area…
+            </Text>
+          ) : searchTooBroad ? (
+            <Text style={styles.searchStatusText}>
+              Zoom in to search this area for restaurants.
+            </Text>
+          ) : searchError ? (
+            <>
+              <Text style={styles.searchStatusText}>{searchError}</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onRetry}
+                style={styles.searchRetry}
+              >
+                <Text style={styles.searchRetryText}>Try again</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.searchStatusText}>{searchNotice}</Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.mapAttribution}>
         <Text style={styles.mapAttributionText}>
           © OpenStreetMap contributors · © OpenFreeMap
         </Text>
       </View>
-
-      {selectedRestaurant && (
-        <View style={styles.preview}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close restaurant preview"
-            onPress={() => setSelectedRestaurant(null)}
-            style={styles.closeButton}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-          <Text style={styles.name}>{selectedRestaurant.name}</Text>
-          <Text style={styles.address}>
-            {[selectedRestaurant.address, selectedRestaurant.city]
-              .filter(Boolean)
-              .join(", ") || "Address not available"}
-          </Text>
-          <Text style={styles.address}>
-            {formatDistance(selectedRestaurant.distance_meters)} away
-          </Text>
-          {selectedRestaurant.listing_source === "openstreetmap" && (
-            <Text style={styles.provenance}>
-              OSM gluten-free options tag:{" "}
-              {selectedRestaurant.gluten_free_options}. Not safety-verified.
-            </Text>
-          )}
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => onReadMore(selectedRestaurant.id)}
-              style={styles.primaryAction}
-            >
-              <Text style={styles.primaryActionText}>Read more</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setDirectionsError(null);
-                setDirectionsOpen(true);
-              }}
-              style={styles.secondaryAction}
-            >
-              <Text style={styles.secondaryActionText}>Get directions</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       <Modal
         animationType="slide"
@@ -308,28 +430,56 @@ const styles = StyleSheet.create({
     color: "#33443e",
     fontSize: 10
   },
+  searchStatus: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderColor: "#e1e8e3",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    left: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    position: "absolute",
+    right: 12,
+    top: 10
+  },
+  searchStatusText: {
+    color: "#33443e",
+    flexShrink: 1,
+    fontSize: 12
+  },
+  searchRetry: {
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  searchRetryText: {
+    color: "#176b52",
+    fontSize: 12,
+    fontWeight: "700"
+  },
   preview: {
     backgroundColor: "#fff",
     borderColor: "#e1e8e3",
     borderRadius: 16,
     borderWidth: 1,
-    bottom: 22,
     elevation: 8,
-    left: 12,
-    padding: 18,
-    position: "absolute",
-    right: 12,
+    marginBottom: 8,
+    padding: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.18,
-    shadowRadius: 8
+    shadowRadius: 8,
+    width: 280
   },
   closeButton: {
     alignItems: "center",
     alignSelf: "flex-end",
     height: 32,
     justifyContent: "center",
-    marginBottom: -26,
     width: 32,
     zIndex: 1
   },

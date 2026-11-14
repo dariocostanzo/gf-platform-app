@@ -1,6 +1,6 @@
 import type { RestaurantSummary } from "@glutenfree/shared";
 import * as Location from "expo-location";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,10 +15,16 @@ import {
 import NearbyMap from "./NearbyMap";
 import type {
   Coordinates,
-  NearbyRestaurant
+  DiscoveryRestaurant,
+  MapRestaurantsResult,
+  MapBounds,
+  NearbyRestaurant,
+  RestaurantSelection
 } from "./restaurantDiscovery";
 import {
   fetchNearbyRestaurants,
+  fetchRestaurantsInBounds,
+  mergeRestaurants,
   nearbyRadiusOptions,
   searchPublishedRestaurants
 } from "./restaurantDiscovery";
@@ -26,8 +32,16 @@ import { supabaseClient } from "../../lib/supabase";
 
 type LoadState<T> =
   | { status: "loading" }
-  | { status: "ready"; results: T }
+  | {
+      status: "ready";
+      results: T;
+      warning?: string | null;
+      truncated?: boolean;
+    }
   | { status: "error"; message: string };
+
+const osmTruncatedMessage =
+  "OpenStreetMap returned more places than can be shown for this area. Zoom in on the map to see more.";
 
 type LocationState =
   | { status: "loading" }
@@ -36,7 +50,7 @@ type LocationState =
   | { status: "error"; message: string };
 
 interface Props {
-  onSelectRestaurant: (restaurantId: string) => void;
+  onSelectRestaurant: (restaurant: RestaurantSelection) => void;
 }
 
 const radiusLabels = new Map<number, string>([
@@ -45,6 +59,42 @@ const radiusLabels = new Map<number, string>([
   [20000, "20 km"],
   [50000, "50 km"]
 ]);
+
+// Nearby and map results are filtered on the device; saved search goes to Supabase.
+function matchesSearchTerm(restaurant: RestaurantSummary, term: string) {
+  return (
+    !term ||
+    `${restaurant.name} ${restaurant.city ?? ""}`
+      .toLocaleLowerCase()
+      .includes(term)
+  );
+}
+
+async function getCurrentPositionWithTimeout() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Getting your location took too long. You can still search by restaurant or city."
+              )
+            ),
+          15_000
+        );
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
 
 export default function RestaurantDiscoveryScreen({
   onSelectRestaurant
@@ -55,8 +105,13 @@ export default function RestaurantDiscoveryScreen({
   const [retryCount, setRetryCount] = useState(0);
   const [locationRetryCount, setLocationRetryCount] = useState(0);
   const [location, setLocation] = useState<LocationState>({ status: "loading" });
-  const [nearby, setNearby] = useState<LoadState<NearbyRestaurant[]>>({
+  const [nearby, setNearby] = useState<LoadState<DiscoveryRestaurant[]>>({
     status: "loading"
+  });
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
+  const [mapSearch, setMapSearch] = useState<LoadState<MapRestaurantsResult>>({
+    status: "ready",
+    results: { restaurants: [], tooBroad: false, truncated: false }
   });
   const [search, setSearch] = useState<LoadState<RestaurantSummary[]>>({
     status: "ready",
@@ -81,9 +136,7 @@ export default function RestaurantDiscoveryScreen({
           return;
         }
 
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
+        const position = await getCurrentPositionWithTimeout();
         if (active) {
           setLocation({
             status: "ready",
@@ -134,9 +187,14 @@ export default function RestaurantDiscoveryScreen({
       radiusMeters,
       controller.signal
     )
-      .then((results) => {
+      .then(({ restaurants, externalSourceError, truncated }) => {
         if (!controller.signal.aborted) {
-          setNearby({ status: "ready", results });
+          setNearby({
+            status: "ready",
+            results: restaurants,
+            warning: externalSourceError,
+            truncated
+          });
         }
       })
       .catch((error: unknown) => {
@@ -153,6 +211,42 @@ export default function RestaurantDiscoveryScreen({
 
     return () => controller.abort();
   }, [location, radiusMeters, retryCount]);
+
+  const handleMapBoundsChange = useCallback((bounds: MapBounds) => {
+    setMapBounds(bounds);
+  }, []);
+
+  useEffect(() => {
+    if (view !== "map" || !mapBounds || location.status !== "ready") {
+      return;
+    }
+
+    const controller = new AbortController();
+    setMapSearch({ status: "loading" });
+    fetchRestaurantsInBounds(
+      mapBounds,
+      location.coordinates,
+      controller.signal
+    )
+      .then((results) => {
+        if (!controller.signal.aborted) {
+          setMapSearch({ status: "ready", results });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setMapSearch({
+            status: "error",
+            message:
+              error instanceof Error
+                ? error.message
+                : "An unexpected error occurred while loading restaurants on the map."
+          });
+        }
+      });
+
+    return () => controller.abort();
+  }, [location, mapBounds, retryCount, view]);
 
   useEffect(() => {
     const term = searchText.trim();
@@ -198,23 +292,48 @@ export default function RestaurantDiscoveryScreen({
   }, [retryCount, searchText]);
 
   const nearbyRestaurants = nearby.status === "ready" ? nearby.results : [];
+  const searchResults = search.status === "ready" ? search.results : [];
   const searchTerm = searchText.trim().toLocaleLowerCase();
   const mapRestaurants = useMemo(
     () =>
-      searchTerm
-        ? nearbyRestaurants.filter((restaurant) =>
-            `${restaurant.name} ${restaurant.city ?? ""}`
-              .toLocaleLowerCase()
-              .includes(searchTerm)
-          )
-        : nearbyRestaurants,
-    [nearbyRestaurants, searchTerm]
+      mergeRestaurants(
+        [
+          ...nearbyRestaurants,
+          ...(mapSearch.status === "ready"
+            ? mapSearch.results.restaurants
+            : [])
+        ].filter((restaurant) => matchesSearchTerm(restaurant, searchTerm))
+      ),
+    [mapSearch, nearbyRestaurants, searchTerm]
   );
-  const listRestaurants = searchTerm
-    ? search.status === "ready"
-      ? search.results
-      : []
-    : nearbyRestaurants;
+  const listRestaurants = useMemo(() => {
+    if (!searchTerm) {
+      return nearbyRestaurants;
+    }
+
+    // Nearby matches come first so their distance survives deduplication
+    // against the search results, which carry no distance.
+    return mergeRestaurants([
+      ...nearbyRestaurants.filter((restaurant) =>
+        matchesSearchTerm(restaurant, searchTerm)
+      ),
+      ...searchResults
+    ]);
+  }, [nearbyRestaurants, searchResults, searchTerm]);
+  const mapSearchFailures = [
+    mapSearch.status === "error" ? mapSearch.message : null,
+    nearby.status === "error" ? nearby.message : null,
+    nearby.status === "ready" ? nearby.warning ?? null : null
+  ].filter((message): message is string => message !== null);
+  const mapSearchError =
+    mapSearchFailures.length > 0
+      ? [...new Set(mapSearchFailures)].join(" ")
+      : null;
+  const mapSearchNotice =
+    (mapSearch.status === "ready" && mapSearch.results.truncated) ||
+    (nearby.status === "ready" && nearby.truncated)
+      ? osmTruncatedMessage
+      : null;
   const listLoading = searchTerm
     ? search.status === "loading"
     : nearby.status === "loading";
@@ -232,7 +351,8 @@ export default function RestaurantDiscoveryScreen({
         <Text style={styles.eyebrow}>DISCOVER</Text>
         <Text style={styles.title}>Find a place to eat</Text>
         <Text style={styles.description}>
-          Start with restaurants near you, or search by name or city.
+          Find restaurants nearby, search by name or city, or pan the map to
+          explore OpenStreetMap listings worldwide.
         </Text>
         <TextInput
           accessibilityLabel="Search restaurants by name or city"
@@ -246,12 +366,17 @@ export default function RestaurantDiscoveryScreen({
         />
         <View style={styles.nearbyHeading}>
           <Text style={styles.nearbyLabel}>
-            {location.status === "ready"
+            {view === "map"
+              ? "Map area · Explore restaurants worldwide"
+              : location.status === "ready"
               ? `Near you · Within ${radiusLabels.get(radiusMeters)}`
               : "Nearby restaurants"}
           </Text>
           <Text style={styles.privacyNote}>
-            Location is used for this search only, not saved.
+            Nearby searches send your location coordinates to Supabase, and a
+            search box around them to OpenStreetMap. Map searches send the
+            visible map area to OpenStreetMap. This app does not save your
+            location.
           </Text>
         </View>
         <ScrollView
@@ -300,10 +425,19 @@ export default function RestaurantDiscoveryScreen({
         {view === "map" && location.status === "ready" ? (
           <NearbyMap
             center={location.coordinates}
-            key={`${location.coordinates.latitude}:${location.coordinates.longitude}:${radiusMeters}`}
+            onBoundsChange={handleMapBoundsChange}
             onReadMore={onSelectRestaurant}
             radiusMeters={radiusMeters}
             restaurants={mapRestaurants}
+            searchError={mapSearchError}
+            searchNotice={mapSearchNotice}
+            searchLoading={
+              mapBounds !== null && mapSearch.status === "loading"
+            }
+            searchTooBroad={
+              mapSearch.status === "ready" && mapSearch.results.tooBroad
+            }
+            onRetry={() => setRetryCount((count) => count + 1)}
           />
         ) : view === "map" ? (
           <LocationPrompt
@@ -350,35 +484,50 @@ export default function RestaurantDiscoveryScreen({
                 </Pressable>
               </View>
             ) : (
-              <FlatList
-                contentContainerStyle={
-                  listRestaurants.length === 0 ? styles.emptyList : undefined
-                }
-                data={listRestaurants}
-                keyExtractor={(restaurant) => restaurant.id}
-                keyboardShouldPersistTaps="handled"
-                ListEmptyComponent={
-                  location.status === "loading" && !searchTerm ? undefined : (
-                    <Text style={styles.messageText}>
-                      {searchTerm
-                        ? "No published restaurants found. Try a different name or city."
-                        : "No restaurants found within this radius yet."}
-                    </Text>
-                  )
-                }
-                renderItem={({ item }) => (
-                  <RestaurantCard
-                    distanceMeters={
-                      isNearbyRestaurant(item)
-                        ? item.distance_meters
-                        : undefined
-                    }
-                    onPress={() => onSelectRestaurant(item.id)}
-                    restaurant={item}
-                  />
+              <>
+                {nearby.status === "ready" && nearby.warning && (
+                  <Text accessibilityRole="alert" style={styles.sourceWarning}>
+                    Some restaurant sources could not be loaded. Available
+                    listings are shown below. {nearby.warning}
+                  </Text>
                 )}
-                showsVerticalScrollIndicator={false}
-              />
+                {!searchTerm &&
+                  nearby.status === "ready" &&
+                  nearby.truncated && (
+                    <Text style={styles.sourceWarning}>
+                      {osmTruncatedMessage}
+                    </Text>
+                  )}
+                <FlatList
+                  contentContainerStyle={
+                    listRestaurants.length === 0 ? styles.emptyList : undefined
+                  }
+                  data={listRestaurants}
+                  keyExtractor={(restaurant) => restaurant.id}
+                  keyboardShouldPersistTaps="handled"
+                  ListEmptyComponent={
+                    location.status === "loading" && !searchTerm ? undefined : (
+                      <Text style={styles.messageText}>
+                        {searchTerm
+                          ? "No published restaurants found. Try a different name or city."
+                          : "No restaurants found within this radius yet."}
+                      </Text>
+                    )
+                  }
+                  renderItem={({ item }) => (
+                    <RestaurantCard
+                      distanceMeters={
+                        isNearbyRestaurant(item)
+                          ? item.distance_meters
+                          : undefined
+                      }
+                      onPress={() => onSelectRestaurant(item)}
+                      restaurant={item}
+                    />
+                  )}
+                  showsVerticalScrollIndicator={false}
+                />
+              </>
             )}
             {location.status !== "loading" && (
               <Text style={styles.safetyNote}>
@@ -421,7 +570,7 @@ function LocationPrompt({
           ? "Allow location while using the app to find restaurants near you. You can still search by restaurant or city."
           : location.status === "error"
             ? location.message
-            : "Location is used only to find nearby restaurants and is not saved."}
+            : "Your location is sent to Supabase and OpenStreetMap to find nearby restaurants. This app does not save it."}
       </Text>
       {location.status === "denied" ? (
         <>
@@ -497,7 +646,7 @@ function RestaurantCard({
   onPress
 }: {
   distanceMeters?: number;
-  restaurant: RestaurantSummary;
+  restaurant: RestaurantSelection;
   onPress: () => void;
 }) {
   const locality = [restaurant.city, restaurant.region, restaurant.country_code]
@@ -521,8 +670,14 @@ function RestaurantCard({
       )}
       {restaurant.listing_source === "openstreetmap" ? (
         <Text style={styles.listingNote}>
-          OpenStreetMap listing · Gluten-free options tag:{" "}
-          {restaurant.gluten_free_options} · Not safety-verified
+          OpenStreetMap listing ·{" "}
+          {restaurant.osm_gluten_free_tag ?? restaurant.gluten_free_options
+            ? `diet:gluten_free=${
+                restaurant.osm_gluten_free_tag ??
+                restaurant.gluten_free_options
+              }`
+            : "No gluten-free options tag recorded"}{" "}
+          · Not safety-verified
         </Text>
       ) : (
         <Text style={styles.listingNote}>
@@ -709,6 +864,15 @@ const styles = StyleSheet.create({
     color: "#52645d",
     fontSize: 12,
     marginTop: 12
+  },
+  sourceWarning: {
+    backgroundColor: "#fff8e9",
+    color: "#4b3b19",
+    fontSize: 12,
+    lineHeight: 18,
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 10
   },
   message: {
     alignItems: "center",
